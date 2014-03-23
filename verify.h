@@ -10,6 +10,7 @@ namespace parse {
 	template<int N>
 	struct Terminal {
 		using type = std::string;
+		static const int value = N;
 	};
 
 	template<typename T, typename U>
@@ -50,7 +51,7 @@ namespace parse {
 	};
 
 	template<int N, typename Vector, int M>
-	struct VerifyRightHandSide<mpl::list<>, N, Vector, M> {
+	struct VerifyRightHandSide<mpl::list0<>, N, Vector, M> {
 		//Specialize for deriving the empty string. We expect no parameters
 		static const bool value = (M == 0);
 	};

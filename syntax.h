@@ -20,7 +20,7 @@ namespace parse {
 
 	template<typename... Ts>
 	struct Right {
-		using type = mpl::list<Ts...>;
+		using type = typename mpl::list<Ts...>::type;
 	};
 
 	template<typename T>
@@ -28,10 +28,10 @@ namespace parse {
 		using type = T;
 	};
 
-	template<typename Left, typename Right, typename Action>
+	template<typename Left_, typename Right_, typename Action>
 	struct Production {
-		using left = Left;
-		using right = Right;
+		using Left = Left_;
+		using Right = Right_;
 		//Verify the production returns the correct type
 		using result_type = typename function_types::result_type<typename BOOST_TYPEOF(&Action::operator())>::type;
 		static_assert(std::is_same<typename Left::type, result_type>::value,

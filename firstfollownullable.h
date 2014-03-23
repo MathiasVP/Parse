@@ -18,27 +18,34 @@
 #include <boost/mpl/insert.hpp>
 #include <boost/mpl/equal.hpp>
 #include <boost/mpl/set.hpp>
+#include <boost/mpl/front.hpp>
+#include <boost/mpl/pop_front.hpp>
+#include <boost/mpl/empty.hpp>
 #include <type_traits>
 
 namespace parse { namespace detail {
+
+	template<typename T, typename U>
+	struct binary_mpl_equal : public mpl::equal<T, U> {};
+
 	//Union two sets of type boost::mpl::set
 	template<typename Set1_, typename Set2_>
 	struct union_ {
 		using Set1 = typename mpl::if_<
 			std::is_same<typename Set1_::type, mpl::void_>,
-			mpl::set<>,
+			mpl::set0<>,
 			typename Set1_::type
 		>::type;
 
 		using Set2 = typename mpl::if_<
 			std::is_same<typename Set2_::type, mpl::void_>,
-			mpl::set<>,
+			mpl::set0<>,
 			typename Set2_::type
 		>::type;
 
 		using type = typename mpl::fold<
-			Set1,
 			Set2,
+			Set1,
 			mpl::insert<mpl::_1, mpl::_2>
 		>::type;
 	};
@@ -58,7 +65,7 @@ namespace parse { namespace detail {
 			>::type::value;
 	};
 
-	template<template<class, class...> class F, typename Init, template<class, class> class Compare, typename... Args>
+	template<template<class, class...> class F, typename Init, template<class...> class Compare, typename... Args>
 	struct Fixpoint {
 	private:
 		template<typename isDone, typename Result>
@@ -80,10 +87,31 @@ namespace parse { namespace detail {
 		using type = typename Repeat<mpl::false_, Init>::type;
 	};
 
+	template<template<class, class...> class F, typename Init, int N, typename... Args>
+	struct Iterate {
+	private:
+		template<int n, typename Result>
+		struct Repeat {
+		private:
+			using NewResult = typename F<Result, Args...>::type;
+		public:
+			using type = typename Repeat<n-1, NewResult
+			>::type;
+		};
+
+		template<typename Result>
+		struct Repeat<0, Result> {
+			using type = Result;
+		};
+
+	public:
+		using type = typename Repeat<N, Init>::type;
+	};
+
 	template<typename P>
 	struct K {
 		using type = typename mpl::int_<
-		mpl::size<typename P::right::type>::value
+		mpl::size<typename P::Right::type>::value
 		>;
 	};
 
@@ -91,8 +119,8 @@ namespace parse { namespace detail {
 	struct LoopFirst {
 	private:
 		using k = typename K<P>::type;
-		using X = typename P::left::type;
-		using Ys = typename P::right::type;
+		using X = typename P::Left::type;
+		using Ys = typename P::Right::type;
 
 		template<typename i, typename First2>
 		struct DoLoopFirst {
@@ -153,8 +181,8 @@ namespace parse { namespace detail {
 		template<typename Nullable2, typename P2, typename... Ps2>
 		struct DoLoopNullable {
 		private:
-			using X = typename P2::left::type;
-			using Ys = typename P2::right::type;
+			using X = typename P2::Left::type;
+			using Ys = typename P2::Right::type;
 			using Nullable3 = typename mpl::if_<
 				isNullable<Nullable2, Ys>,
 				typename mpl::insert<Nullable2, X>::type,
@@ -178,8 +206,8 @@ namespace parse { namespace detail {
 		struct LoopFollow {
 		private:
 			using k = typename K<P>::type;
-			using X = typename P::left::type;
-			using Ys = typename P::right::type;
+			using X = typename P::Left::type;
+			using Ys = typename P::Right::type;
 
 			template<typename i, typename j, typename Follow2>
 			struct DoLoopFollow {
@@ -271,11 +299,6 @@ namespace parse { namespace detail {
 
 		template<typename First_, typename Follow_, typename Nullable_, typename... Ps_>
 		struct FirstFollowNullable {
-		private:
-			template<typename T, typename U>
-			struct binary_mpl_equal : public mpl::equal<T, U> {};
-
-		public:
 			using Nullable = typename Fixpoint<
 				LoopNullable, Nullable_, binary_mpl_equal, Ps_..., mpl::na
 			>::type;
@@ -287,6 +310,44 @@ namespace parse { namespace detail {
 			>::type;
 		};
 	}
+
+	template<typename First, typename Nullable, typename List>
+	struct ListFirst {
+
+		template<typename T>
+		using Car = typename mpl::front<T>::type;
+		template<typename T>
+		using Cdr = typename mpl::pop_front<T>::type;
+
+		template<typename Head, typename Tail, typename empty>
+		struct Loop {
+			using type = typename mpl::eval_if<
+				detail::isNullable<Nullable, mpl::list1<Head>>,
+				detail::union_<
+					mpl::at<First, Head>,
+					Loop<
+						Car<Tail>,
+						Cdr<Tail>,
+						typename mpl::empty<Cdr<Tail>>::type
+					>
+				>,
+				mpl::at<First, Head>
+			>::type;
+		};
+
+		template<typename Head, typename Tail>
+		struct Loop<Head, Tail, mpl::true_> {
+			using type = mpl::set1<Head>;
+		};
+
+		using type = typename mpl::eval_if<
+			mpl::empty<List>,
+			mpl::list0<>,
+			Loop<Car<List>, Cdr<List>, typename mpl::empty<Cdr<List>>::type>
+		>::type;
+	};
+
+
 }
 
 #endif // !_PARSE_FIRST_FOLLOW_NULLABLE_H

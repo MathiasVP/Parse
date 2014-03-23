@@ -2,104 +2,118 @@
 
 #include <iostream>
 #include <string>
-#include <fstream>
+#include <vector>
 
 using namespace parse;
 
-struct X : public Nonterminal<X> {
-	std::string s;
-
-	X() {}
-	X(std::string s) : s(move(s)) {}
+struct S : public Nonterminal<S> {
+	
 };
 
-struct Y : public Nonterminal<Y> {
-	std::string s;
+struct V : public Nonterminal<V> {
 
-	Y() {}
-	Y(std::string s) : s(move(s)) {}
 };
 
-struct Z : public Nonterminal<Z> {
-	std::string s;
+struct E : public Nonterminal<E> {
 
-	Z() {}
-	Z(std::string s) : s(move(s)) {}
 };
 
 struct Rule1 {
-	Z operator()(std::string) {
-		return Z("");
+	S operator()(V, std::string, E) {
+		return S();
 	}
 };
 
 struct Rule2 {
-	Z operator()(X, Y, Z) {
-		return Z("");
+	S operator()(E) {
+		return S();
 	}
 };
 
 struct Rule3 {
-	Y operator()() {
-		return Y("");
+	E operator()(V) {
+		return E();
 	}
 };
 
 struct Rule4 {
-	Y operator()(std::string) {
-		return Y("");
+	V operator()(std::string) {
+		return V();
 	}
 };
 
 struct Rule5 {
-	X operator()(Y) {
-		return X("");
-	}
-};
-
-struct Rule6 {
-	X operator()(std::string) {
-		return X("");
+	V operator()(std::string, E) {
+		return V();
 	}
 };
 
 int main(int argc, char* argv []) {
-	using d = Terminal<0>;
-	using c = Terminal<1>;
-	using a = Terminal<2>;
+	using x = Terminal<0>;
+	using deref = Terminal<1>;
+	using assign = Terminal<2>;
 
-	LrParser<
+	using Parser = LrParser<
 		Production<
-			Left<Z>,
-			Right<d>,
+			Left<S>,
+			Right<V, assign, E>,
 			Rule1
 		>,
 		Production<
-			Left<Z>,
-			Right<X, Y, Z>,
+			Left<S>,
+			Right<E>,
 			Rule2
 		>,
 		Production<
-			Left<Y>,
-			Right<>,
+			Left<E>,
+			Right<V>,
 			Rule3
 		>,
 		Production<
-			Left<Y>,
-			Right<c>,
+			Left<V>,
+			Right<x>,
 			Rule4
 		>,
 		Production<
-			Left<X>,
-			Right<Y>,
+			Left<V>,
+			Right<deref, E>,
 			Rule5
-		>,
-		Production<
-			Left<X>,
-			Right<a>,
-			Rule6
 		>
-	>();
+	>;
 
+	auto table = Parser::myTable;
+	int n = 0;
+	std::cout << "\t$   x   *   =     S    E    V" << std::endl;
+	for (const auto& row : table) {
+		std::cout << n++ << "\t";
+		for (const auto& elem : row) {
+			std::string s;
+			switch (elem.first) {
+			case parse::detail::Operation::REDUCE:
+				s = "r" + std::to_string(elem.second);
+				break;
+			case parse::detail::Operation::SHIFT:
+				s = "s" + std::to_string(elem.second);
+				break;
+			case parse::detail::Operation::GOTO:
+				s = "g" + std::to_string(elem.second);
+				break;
+			case parse::detail::Operation::ACCEPT:
+				s = "a";
+				break;
+			}
+			while (s.size() < 4) {
+				s += " ";
+			}
+			std::cout << s;
+		}
+		std::cout << std::endl;
+	}
+
+	std::vector<int> tokens = {0, 2, 1, 0, -1};
+
+	auto res = Parser::parse(tokens.begin(), tokens.end());
+
+	std::cin.get();
 	return 0;
 }

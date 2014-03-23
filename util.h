@@ -48,6 +48,16 @@ namespace parse {
 		void set_to_string(std::ostream& out) {
 			mpl::for_each<Set>(set_to_string_helper(out));
 		}
+
+		template<unsigned int n, typename T, typename... Ts>
+		struct nth {
+			using type = typename nth<n - 1, Ts...>::type;
+		};
+
+		template<typename T, typename... Ts>
+		struct nth<0, T, Ts...> {
+			using type = T;
+		};
 	}
 }
 
