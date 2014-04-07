@@ -658,20 +658,6 @@ namespace parse {
 		using IntToRow = typename TableInfo::IntToRow;
 		using RowToInt = typename TableInfo::RowToInt;
 
-		LrParser() {
-			std::ofstream out("out.txt");
-			detail::map_to_string<IntToRow>(out);
-			detail::map_to_string<RowToInt>(out);
-			out << std::endl;
-			detail::map_to_string<IntToCol>(out);
-			detail::map_to_string<ColToInt>(out);
-			out << std::endl;
-			detail::map_to_string<ProductionToInt>(out);
-			detail::map_to_string<IntToProduction>(out);
-			detail::set_to_string<Table>(out);
-			out.close();
-		}
-
 		template<typename From, typename To, typename Lookahead, typename It>
 		static void tableOperationHelper(detail::ShiftT<From, To, Lookahead>,
 			It& begin, It& end, int& state, std::vector<int>& stack,
@@ -681,16 +667,7 @@ namespace parse {
 				state = -1;
 				return;			
 			}
-			/*std::cout << "Shift: ";
-			switch(Lookahead::value) {
-				case -1: std::cout << "$"; break;
-				case 0: std::cout << "x"; break;
-				case 1: std::cout << "*"; break;
-				case 2: std::cout << "="; break;
-				default: std::cout << "ERROR!"; break;
-			}
-			std::cout << std::endl;*/
-			stack.push_back(Lookahead::value); //==symbol.second
+			stack.push_back(Lookahead::value);
 			state = mpl::at<RowToInt, To>::type::value;
 			stack.push_back(state);
 			symbol = *begin++;
@@ -700,11 +677,10 @@ namespace parse {
 		static void tableOperationHelper(detail::GotoT<From, To, Lookahead>,
 			It& begin, It& end, int& state, std::vector<int>& stack,
 			typename std::iterator_traits<It>::value_type& symbol) {
-			//std::cout << "Goto: ";
+
 			symbol = stack.back();
 			stack.pop_back();
 			state = mpl::at<RowToInt, To>::type::value;
-			//std::cout << state << std::endl << std::endl;
 			stack.push_back(state);
 		}
 
@@ -712,8 +688,6 @@ namespace parse {
 		static void tableOperationHelper(detail::ReduceT<From, Left, Right, Lookahead>,
 			It& begin, It& end, int& state, std::vector<int>& stack,
 			typename std::iterator_traits<It>::value_type& symbol) {
-			/*std::cout << "Reduce " << mpl::at<ProductionToInt, mpl::pair<Left, Right>>::type::value
-				<< std::endl;*/
 			for(int i = 0; i < 2*mpl::size<Right>::type::value; ++i) {
 				stack.pop_back();
 			}
@@ -727,7 +701,6 @@ namespace parse {
 		static void tableOperationHelper(detail::AcceptT<From>,
 			It& begin, It& end, int& state, std::vector<int>& stack,
 			typename std::iterator_traits<It>::value_type& symbol) {
-			//std::cout << "Accept" << std::endl;
 			state = -2;
 		}
 
@@ -735,11 +708,10 @@ namespace parse {
 		static void tableOperationHelper(mpl::na,
 			It& begin, It& end, int& state, std::vector<int>& stack,
 			typename std::iterator_traits<It>::value_type& symbol) {
-			//std::cout << "Invalid" << std::endl;
 			state = -1;
 		}
 
-		template<int symbolIndex, int stateIndex>
+		template<int symbolIndex, int stateIndex, bool symbolOutOfBounds, bool stateOutOfBounds>
 		struct TableOperation {
 			using Row = typename mpl::at<IntToRow, mpl::int_<stateIndex>>::type;
 			using Col = typename mpl::eval_if<
@@ -771,14 +743,20 @@ namespace parse {
 			template<typename It>
 			static void doit(It& begin, It& end, int& state, std::vector<int>& stack,
 				typename std::iterator_traits<It>::value_type& symbol) {
-				//std::cout << stateIndex << "-> " << demangle(typeid(Row).name()) << std::endl;
-				//std::cout << symbolIndex << " -> " << demangle(typeid(Col).name()) << std::endl << std::endl;
 				tableOperationHelper(res2(), begin, end, state, stack, symbol);
 			}
 		};
 
+		template<int symbolIndex, int stateIndex>
+		struct TableOperation<symbolIndex, stateIndex, false, false> {
+			
+			template<typename It>
+			static void doit(It& begin, It& end, int& state, std::vector<int>& stack,
+				typename std::iterator_traits<It>::value_type& symbol) {}
+		};
+
 #define PARSE_SWITCH_CASE_TERMINAL(_, symbolIndex, stateIndex) \
-	case symbolIndex-1: TableOperation<symbolIndex-1, stateIndex>::doit(begin, end, state, stack, symbol); break;
+	case symbolIndex-1: TableOperation<symbolIndex-1, stateIndex, symbolIndex-1 < NumCols::value, stateIndex < NumRows::value>::doit(begin, end, state, stack, symbol); break;
 
 #define PARSE_SWITCH_CASE_STATE(_, stateIndex, __) \
 	case stateIndex:\
@@ -790,25 +768,11 @@ namespace parse {
 		template<typename It>
 		static bool parse(It begin, It end) {
 			std::vector<int> stack;
-			auto state = 17;
+			//I suspect that the last row is always the initial closure set. Not yet 100% sure though
+			auto state = NumRows::value-1;
 			stack.push_back(state);
 			auto symbol = *begin++;
 			while (state >= 0) {
-				/*std::cout << "State: " << state << std::endl << "Symbol: ";
-				switch(symbol) {
-					case -1: std::cout << "$"; break;
-					case 0: std::cout << "x"; break;
-					case 1: std::cout << "*"; break;
-					case 2: std::cout << "="; break;
-					case 4: std::cout << "S"; break;
-					case 5: std::cout << "E"; break;
-					case 6: std::cout << "V"; break;
-					default: std::cout << "ERROR!"; break;
-				}
-				std::cout << std::endl;
-				for(const auto& e : stack) { std::cout << e << " "; }
-				std::cout << std::endl;*/
-
 				switch (state) {
 					BOOST_PP_REPEAT(BOOST_PP_LIMIT_REPEAT, PARSE_SWITCH_CASE_STATE, _)
 				}

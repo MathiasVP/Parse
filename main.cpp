@@ -81,7 +81,35 @@ int main(int argc, char* argv []) {
 		>
 	>;
 
-	std::vector<int> tokens = { 0, 2, 1, 0, -1 };
+	LrParser<
+		Production<
+			Left<S>,
+			Right<V, assign, E>,
+			Rule1
+		>,
+		Production<
+			Left<S>,
+			Right<E>,
+			Rule2
+		>,
+		Production<
+			Left<E>,
+			Right<V>,
+			Rule3
+		>,
+		Production<
+			Left<V>,
+			Right<x>,
+			Rule4
+		>,
+		Production<
+			Left<V>,
+			Right<deref, E>,
+			Rule5
+		>
+	>();
+
+	std::vector<int> tokens = { 0, 2, 0, -1 };
 
 	std::cout << "Starting parse..." << std::endl;
 	std::cout << Parser::parse(tokens.begin(), tokens.end()) << std::endl;
