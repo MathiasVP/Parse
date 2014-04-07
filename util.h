@@ -5,8 +5,23 @@
 #include <typeinfo>
 #include <boost/mpl/for_each.hpp>
 #include <boost/mpl/pair.hpp>
+#include <cstdlib>
+#include <memory>
+#include <cxxabi.h>
 
 namespace parse {
+	std::string demangle(const char* name) {
+
+	    int status = -4; // some arbitrary value to eliminate the compiler warning
+
+	    // enable c++11 by passing the flag -std=c++11 to g++
+	    std::unique_ptr<char, void(*)(void*)> res {
+		abi::__cxa_demangle(name, NULL, NULL, &status),
+		std::free
+	    };
+
+	    return (status==0) ? res.get() : name ;
+	}
 	namespace detail {
 		using namespace boost;
 
@@ -19,7 +34,7 @@ namespace parse {
 
 			template<typename T, typename U>
 			void operator()(mpl::pair<T, U>) {
-				out << typeid(T).name() << " -> " << typeid(U).name() << std::endl;
+				out << demangle(typeid(T).name()) << " -> " << demangle(typeid(U).name()) << std::endl;
 			}
 
 			template<typename T>
@@ -40,7 +55,7 @@ namespace parse {
 
 			template<typename T>
 			void operator()(T) {
-				out << typeid(T).name() << std::endl;
+				out << demangle(typeid(T).name()) << std::endl;
 			}
 		};
 

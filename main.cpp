@@ -81,39 +81,11 @@ int main(int argc, char* argv []) {
 		>
 	>;
 
-	auto table = Parser::myTable;
-	int n = 0;
-	std::cout << "\t$   x   *   =     S    E    V" << std::endl;
-	for (const auto& row : table) {
-		std::cout << n++ << "\t";
-		for (const auto& elem : row) {
-			std::string s;
-			switch (elem.first) {
-			case parse::detail::Operation::REDUCE:
-				s = "r" + std::to_string(elem.second);
-				break;
-			case parse::detail::Operation::SHIFT:
-				s = "s" + std::to_string(elem.second);
-				break;
-			case parse::detail::Operation::GOTO:
-				s = "g" + std::to_string(elem.second);
-				break;
-			case parse::detail::Operation::ACCEPT:
-				s = "a";
-				break;
-			}
-			while (s.size() < 4) {
-				s += " ";
-			}
-			std::cout << s;
-		}
-		std::cout << std::endl;
-	}
+	std::vector<int> tokens = { 0, 2, 1, 0, -1 };
 
-	std::vector<int> tokens = {0, 2, 1, 0, -1};
-
-	auto res = Parser::parse(tokens.begin(), tokens.end());
-
+	std::cout << "Starting parse..." << std::endl;
+	std::cout << Parser::parse(tokens.begin(), tokens.end()) << std::endl;
+	std::cout << "Parsing ended..." << std::endl;
 	std::cin.get();
 	return 0;
 }

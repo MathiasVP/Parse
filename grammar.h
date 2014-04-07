@@ -12,6 +12,11 @@
 #include <boost/mpl/partition.hpp>
 #include <boost/mpl/find_if.hpp>
 #include <boost/mpl/deref.hpp>
+#include <boost/optional.hpp>
+#include <boost/mpl/long.hpp>
+
+#include <boost/preprocessor.hpp>
+
 #include <fstream>
 #include <string>
 #include <array>
@@ -61,6 +66,14 @@ namespace parse {
 			using Lookahead = Lookahead_;
 		};
 
+		template<typename From_, typename Left_, typename Right_, typename Lookahead_>
+		struct ReduceT {
+			using From = From_;
+			using Left = Left_;
+			using Right = Right_;
+			using Lookahead = Lookahead_;
+		};
+
 		template<typename From_, typename To_, typename Lookahead_>
 		struct EdgeT {
 			using type = GotoT< From_, To_, Lookahead_>;
@@ -74,14 +87,6 @@ namespace parse {
 		template<typename From_, typename To_>
 		struct EdgeT<From_, To_, Terminal<-1>> {
 			using type = AcceptT<From_>;
-		};
-
-		template<typename From_, typename Left_, typename Right_, typename Lookahead_>
-		struct ReduceT {
-			using From = From_;
-			using Left = Left_;
-			using Right = Right_;
-			using Lookahead = Lookahead_;
 		};
 
 		template<typename T>
@@ -297,7 +302,7 @@ namespace parse {
 			>::type;
 		};
 
-		template<typename T>
+		template<typename Table>
 		struct ConstructReduces {
 			template<typename R, typename I>
 			struct InnerLoop {
@@ -329,9 +334,11 @@ namespace parse {
 				>::type;		
 			};
 
+			using T = typename mpl::at_c<Table, 0>::type;
+			using SG = typename mpl::at_c<Table, 1>::type;
 			using type = typename mpl::fold<
 				T,
-				mpl::set0<>,
+				SG,
 				InnerLoop<mpl::_1, mpl::_2>
 			>::type;
 		};
@@ -342,7 +349,7 @@ namespace parse {
 		template<typename From, typename To, typename Lookahead>
 		struct IsShift<ShiftT<From, To, Lookahead>> : mpl::true_{};
 
-		template<typename NumTerminals, typename NumNonterminals, typename S, typename G, typename R>
+		template<typename NumTerminals, typename NumNonterminals, typename SGR>
 		struct CreateIndexableTable {
 
 			template<typename Seq, typename Item>
@@ -361,34 +368,54 @@ namespace parse {
 
 
 			template<typename Map, typename Item>
-			struct Insert
-				: mpl::list2<
+			struct Insert {
+				using Int = typename GetKey<Map, Item>::type;
+				using From = typename Item::From;
+				using type = mpl::list3<
 					typename mpl::insert<
 						typename mpl::at_c<Map, 0>::type,
 						mpl::pair<
-							typename Item::From,
-							typename GetKey<Map,Item>::type
+							From,
+							Int
 						>
 					>::type,
-					typename mpl::at_c<Map, 1>::type
-				>::type {};
+					typename mpl::insert<
+						typename mpl::at_c<Map, 1>::type,
+						mpl::pair<
+							Int,
+							From
+						>
+					>::type,
+					typename mpl::at_c<Map, 2>::type
+				>;
+			};
 
 			template<typename Map, typename Item>
-			struct InsertAndUpdate
-				: mpl::list2<
+			struct InsertAndUpdate {
+				using From = typename Item::From;
+				using Int = typename mpl::at_c<Map, 2>::type;
+				using type = mpl::list3<
 					typename mpl::insert<
 						typename mpl::at_c<Map, 0>::type,
 						mpl::pair<
-							typename Item::From,
-							typename mpl::at_c<Map, 1>::type
+							From,
+							Int
 						>
 					>::type,
-					typename mpl::at_c<Map, 1>::type::next
-				>::type {};
+					typename mpl::insert<
+						typename mpl::at_c<Map, 1>::type,
+						mpl::pair<
+							Int,
+							From
+						>
+					>::type,
+					typename Int::next
+				>;
+			};
 
-			using S2 = typename mpl::fold<
-				S,
-				mpl::list2<mpl::map0<>, mpl::int_<0>>,
+			using SGR2 = typename mpl::fold<
+				SGR,
+				mpl::list3<mpl::map0<>, mpl::map0<>, mpl::int_<0>>,
 				mpl::if_<
 					HasKey<mpl::_1, mpl::_2>,
 					Insert<mpl::_1, mpl::_2>,
@@ -396,36 +423,9 @@ namespace parse {
 				>
 			>::type;
 
-			using G2 = typename mpl::fold<
-				G,
-				S2,
-				mpl::if_<
-					HasKey<mpl::_1, mpl::_2>,
-					Insert<mpl::_1, mpl::_2>,
-					InsertAndUpdate<mpl::_1, mpl::_2>
-				>
-			>::type;
-
-			using R2 = typename mpl::fold<
-				R,
-				G2,
-				mpl::if_<
-					HasKey<mpl::_1, mpl::_2>,
-					Insert<mpl::_1, mpl::_2>,
-					InsertAndUpdate<mpl::_1, mpl::_2>
-				>
-			>::type;
-
-			using type = typename mpl::at_c<R2, 0>::type;
-			using NumRows = typename mpl::at_c<R2, 1>::type;
-
-			using table = std::array<
-				std::array<
-					std::pair<Operation, int>,
-					NumTerminals::value + NumNonterminals::value
-				>,
-				NumRows::value
-			>;
+			using RowToInt = typename mpl::at_c<SGR2, 0>::type;
+			using IntToRow = typename mpl::at_c<SGR2, 1>::type;
+			using NumRows = typename mpl::at_c<SGR2, 2>::type;
 		};
 
 		//P is the original starting nonterminal, before we argument the grammar
@@ -439,28 +439,19 @@ namespace parse {
 			>;
 			
 			using T2 = typename Closure<First, Nullable, mpl::set1<StartItem>, P, Ps...>::type;
-			using Table = typename detail::Fixpoint<
+			using TableSets = typename detail::Fixpoint<
 				ConstructTableLoop,
 				mpl::list2<mpl::set1<T2>, mpl::set0<>>,
 				detail::binary_mpl_equal,
 				First, Nullable, P, Ps...
 			>::type;
 
-			using E = typename mpl::partition<
-				typename mpl::at_c<Table, 1>::type,
-				detail::IsShift<mpl::_1>,
-				mpl::inserter<mpl::set0<>, mpl::insert<mpl::_1, mpl::_2>>,
-				mpl::inserter<mpl::set0<>, mpl::insert<mpl::_1, mpl::_2>>
-			>::type;
-			using S = typename E::first;
-			using G = typename E::second;
-			using R = typename ConstructReduces<
-				typename mpl::at_c<Table, 0>::type
-			>::type;
+			//Shifts, gotos and reduces all in one set!
+			using Table = typename ConstructReduces<TableSets>::type;
 
-			using result = typename detail::CreateIndexableTable<NumTerminals, NumNonTerminals, S, G, R>;
-			using type = typename result::type;
-			using table = typename result::table;
+			using result = typename detail::CreateIndexableTable<NumTerminals, NumNonTerminals, Table>;
+			using RowToInt = typename result::RowToInt;
+			using IntToRow = typename result::IntToRow;
 			using NumRows = typename result::NumRows;
 		};
 
@@ -478,46 +469,6 @@ namespace parse {
 			P p;
 		};
 	}
-
-	template<typename Op, typename ProductionMap, typename RowMap>
-	struct ValueForOperation {
-		static const detail::Operation tag = detail::Operation::INVALID;
-		static const int value = 0;
-	};
-
-	template<typename From, typename Left, typename Right, typename Lookahead, typename ProductionMap, typename RowMap>
-	struct ValueForOperation<detail::ReduceT<From, Left, Right, Lookahead>, ProductionMap, RowMap> {
-		static const detail::Operation tag = detail::Operation::REDUCE;
-
-		static const int value = mpl::at<
-			ProductionMap,
-			mpl::pair<Left, Right>
-		>::type::value;
-	};
-
-	template<typename From, typename To, typename Lookahead, typename ProductionMap, typename RowMap>
-	struct ValueForOperation<detail::ShiftT<From, To, Lookahead>, ProductionMap, RowMap> {
-		static const detail::Operation tag = detail::Operation::SHIFT;
-		static const int value = mpl::at<
-			RowMap,
-			To
-		>::type::value;
-	};
-
-	template<typename From, typename To, typename Lookahead, typename ProductionMap, typename RowMap>
-	struct ValueForOperation<detail::GotoT<From, To, Lookahead>, ProductionMap, RowMap> {
-		static const detail::Operation tag = detail::Operation::GOTO;
-		static const int value = mpl::at<
-			RowMap,
-			To
-		>::type::value;
-	};
-
-	template<typename typename From, typename ProductionMap, typename RowMap>
-	struct ValueForOperation<detail::AcceptT<From>, ProductionMap, RowMap> {
-		static const detail::Operation tag = detail::Operation::ACCEPT;
-		static const int value = 0;
-	};
 
 	template<typename P_, typename... Ps_>
 	struct LrParser : detail::LrParserHelper<P_, Ps_...> {
@@ -633,8 +584,39 @@ namespace parse {
 		>;
 
 		public:
-		static const typename TableInfo::table myTable;
-		static const std::array<std::pair<int, int>, 1 + sizeof...(Ps_)> productions;
+
+		template<typename Seq, typename Prod>
+		struct InsertAndUpdate {
+			using toInt = typename mpl::at_c<Seq, 0>::type;
+			using fromInt = typename mpl::at_c<Seq, 1>::type;
+			using Value = typename mpl::at_c<Seq, 2>::type;
+			using Production = mpl::pair<
+				typename Prod::Left::type,
+				typename Prod::Right::type
+			>;
+			using type = mpl::list3<
+				typename mpl::insert<
+					toInt,
+					mpl::pair<Production, Value>
+				>::type,
+				typename mpl::insert<
+					fromInt,
+					mpl::pair<Value, Production>
+				>::type,
+				typename Value::next
+			>;
+		};
+
+		using ProductionMap = typename mpl::fold<
+			typename mpl::list<P_, Ps_...>::type,
+			mpl::list3<mpl::map0<>, mpl::map0<>, mpl::int_<0>>,
+			InsertAndUpdate<mpl::_1, mpl::_2>
+		>::type;
+		using ProductionToInt = typename mpl::at_c<ProductionMap, 0>::type;
+		using IntToProduction = typename mpl::at_c<ProductionMap, 1>::type;
+		using Table = typename TableInfo::Table;
+		using NumRows = typename TableInfo::NumRows;
+		using NumCols = typename mpl::plus<NumTerminals, NumNonterminals>::type;
 
 		template<typename Seq, typename Prod>
 		struct HasKey
@@ -645,239 +627,196 @@ namespace parse {
 
 		template<typename Seq, typename Prod>
 		struct InsertLeftAndUpdate {
-			using Map = typename mpl::at_c<Seq, 0>::type;
-			using Value = typename mpl::at_c<Seq, 1>::type;
-			using type = mpl::list2<
+			using ToInt = typename mpl::at_c<Seq, 0>::type;
+			using FromInt = typename mpl::at_c<Seq, 1>::type;
+			using Value = typename mpl::at_c<Seq, 2>::type;
+			using Left = typename Prod::Left::type;
+			using type = mpl::list3<
 				typename mpl::insert<
-					Map,
-					mpl::pair<
-						typename Prod::Left::type,
-						Value
-					>
+					ToInt,
+					mpl::pair<Left, Value>
+				>::type,
+				typename mpl::insert<
+					FromInt,
+					mpl::pair<Value, Left>
 				>::type,
 				typename Value::next
 			>;
 		};
 
-		template<typename Seq, typename Prod>
-		struct InsertAndUpdate {
-			using Map = typename mpl::at_c<Seq, 0>::type;
-			using Value = typename mpl::at_c<Seq, 1>::type;
-			using type = mpl::list2<
-				typename mpl::insert<
-					Map,
-					mpl::pair<
-						mpl::pair<
-							typename Prod::Left::type,
-							typename Prod::Right::type
-						>,
-						Value
-					>
-				>::type,
-				typename Value::next
-			>;
-		};
-
-		using RowMap = typename TableInfo::type;
-		using ProductionMap = typename mpl::at_c<
-			typename mpl::fold<
-				typename mpl::list<P_, Ps_...>::type,
-				mpl::list2<mpl::map0<>, mpl::int_<0>>,
-				InsertAndUpdate<mpl::_1, mpl::_2>
-			>::type,
-			0
+		using ColMap = typename mpl::fold<
+			typename mpl::list<P_, Ps_...>::type,
+			mpl::list3<mpl::map0<>, mpl::map0<>, typename NumTerminals::prior>,
+			mpl::if_<
+				HasKey<mpl::_1, mpl::_2>,
+				mpl::_1,
+				InsertLeftAndUpdate<mpl::_1, mpl::_2>
+			>
 		>::type;
-		using S = typename TableInfo::S;
-		using G = typename TableInfo::G;
-		using R = typename TableInfo::R;
-		using NumRows = typename TableInfo::NumRows;
-		using NumCols = typename mpl::plus<NumTerminals, NumNonterminals>::type;
-
-		using ColMap = typename mpl::at_c<
-			typename mpl::fold<
-				typename mpl::list<P_, Ps_...>::type,
-				mpl::list2<mpl::map0<>, typename NumTerminals>,
-				mpl::if_<
-					HasKey<mpl::_1, mpl::_2>,
-					mpl::_1,
-					InsertLeftAndUpdate<mpl::_1, mpl::_2>
-				>
-			>::type,
-			0
-		>::type;
-
+		using ColToInt = typename mpl::at_c<ColMap, 0>::type;
+		using IntToCol = typename mpl::at_c<ColMap, 1>::type;
+		using IntToRow = typename TableInfo::IntToRow;
+		using RowToInt = typename TableInfo::RowToInt;
 
 		LrParser() {
 			std::ofstream out("out.txt");
-			detail::map_to_string<RowMap>(out);
+			detail::map_to_string<IntToRow>(out);
+			detail::map_to_string<RowToInt>(out);
 			out << std::endl;
-			detail::map_to_string<ColMap>(out);
+			detail::map_to_string<IntToCol>(out);
+			detail::map_to_string<ColToInt>(out);
 			out << std::endl;
-			detail::map_to_string<ProductionMap>(out);
-			out << std::endl;
-			detail::set_to_string<S>(out);
-			detail::set_to_string<G>(out);
-			detail::set_to_string<R>(out);
+			detail::map_to_string<ProductionToInt>(out);
+			detail::map_to_string<IntToProduction>(out);
+			detail::set_to_string<Table>(out);
 			out.close();
 		}
 
-		template<typename It>
-		static ParseResultType parse(It begin, It end) {
-			std::stack<int> stack;
-			auto state = 0;
-			stack.push(0);
-			auto symbol = *begin++;
-			auto entry = myTable[state][symbol+1];
-			while (entry.first != detail::Operation::ACCEPT) {
-				if (entry.first == detail::Operation::SHIFT) {
-					stack.push(symbol);
-					state = entry.second;
-					stack.push(static_cast<int>(state));
-					symbol = *begin++;
-				}
-				else if (entry.first == detail::Operation::REDUCE) {
-					auto prod = productions.at(entry.second);
-					for (int i = 0; i < 2*prod.second; ++i) {
-						stack.pop();
-					}
-					state = stack.top();
-					stack.push(prod.first);
-					state = myTable[state][prod.first].second;
-					stack.push(state);
-				}
-				else if (entry.first == detail::Operation::INVALID) {
-					throw std::exception();
-				}
-				entry = myTable[state][symbol+1];
+		template<typename From, typename To, typename Lookahead, typename It>
+		static void tableOperationHelper(detail::ShiftT<From, To, Lookahead>,
+			It& begin, It& end, int& state, std::vector<int>& stack,
+			typename std::iterator_traits<It>::value_type& symbol) {
+
+			if(begin == end) {
+				state = -1;
+				return;			
 			}
-			return ParseResultType();
+			/*std::cout << "Shift: ";
+			switch(Lookahead::value) {
+				case -1: std::cout << "$"; break;
+				case 0: std::cout << "x"; break;
+				case 1: std::cout << "*"; break;
+				case 2: std::cout << "="; break;
+				default: std::cout << "ERROR!"; break;
+			}
+			std::cout << std::endl;*/
+			stack.push_back(Lookahead::value); //==symbol.second
+			state = mpl::at<RowToInt, To>::type::value;
+			stack.push_back(state);
+			symbol = *begin++;
 		}
 
-		private:
+		template<typename From, typename To, typename Lookahead, typename It>
+		static void tableOperationHelper(detail::GotoT<From, To, Lookahead>,
+			It& begin, It& end, int& state, std::vector<int>& stack,
+			typename std::iterator_traits<It>::value_type& symbol) {
+			//std::cout << "Goto: ";
+			symbol = stack.back();
+			stack.pop_back();
+			state = mpl::at<RowToInt, To>::type::value;
+			//std::cout << state << std::endl << std::endl;
+			stack.push_back(state);
+		}
 
-		//T is ReduceT, GotoT or ShiftT
-		template<typename T, typename Row>
-		struct FromEquals {
-			using type = typename mpl::equal_to<
-				typename mpl::at<RowMap, typename T::From>::type,
-				Row
+		template<typename From, typename Left, typename Right, typename Lookahead, typename It>
+		static void tableOperationHelper(detail::ReduceT<From, Left, Right, Lookahead>,
+			It& begin, It& end, int& state, std::vector<int>& stack,
+			typename std::iterator_traits<It>::value_type& symbol) {
+			/*std::cout << "Reduce " << mpl::at<ProductionToInt, mpl::pair<Left, Right>>::type::value
+				<< std::endl;*/
+			for(int i = 0; i < 2*mpl::size<Right>::type::value; ++i) {
+				stack.pop_back();
+			}
+			state = stack.back();
+			stack.push_back(mpl::at<ColToInt, typename Left::type>::type::value);
+			stack.push_back(symbol);
+			symbol = mpl::at<ColToInt, typename Left::type>::type::value;
+		}
+
+		template<typename From, typename It>
+		static void tableOperationHelper(detail::AcceptT<From>,
+			It& begin, It& end, int& state, std::vector<int>& stack,
+			typename std::iterator_traits<It>::value_type& symbol) {
+			//std::cout << "Accept" << std::endl;
+			state = -2;
+		}
+
+		template<typename It>
+		static void tableOperationHelper(mpl::na,
+			It& begin, It& end, int& state, std::vector<int>& stack,
+			typename std::iterator_traits<It>::value_type& symbol) {
+			//std::cout << "Invalid" << std::endl;
+			state = -1;
+		}
+
+		template<int symbolIndex, int stateIndex>
+		struct TableOperation {
+			using Row = typename mpl::at<IntToRow, mpl::int_<stateIndex>>::type;
+			using Col = typename mpl::eval_if<
+				mpl::has_key<IntToCol, mpl::long_<symbolIndex>>,
+				mpl::at<IntToCol, mpl::long_<symbolIndex>>,
+				mpl::identity<Terminal<symbolIndex>>
 			>::type;
-		};
 
-		//T is ReduceT, GotoT or ShiftT
-		template<typename T, typename Col>
-		struct LookaheadEquals {
-
-			template<typename U>
-			struct NontermLookaheadEquals {
-				using type = typename mpl::equal_to<
-					typename mpl::at<ColMap, typename U::Lookahead>::type,
-					Col
-				>::type;
-			};
-			
-			template<typename U>
-			struct TermLookaheadEquals {
-				using type = typename mpl::equal_to<
-					typename mpl::int_<U::Lookahead::value>::next,
-					Col
-				>::type;
+			struct Predicate {
+				template<typename Op>
+				struct apply {
+					using type = typename mpl::and_<
+						boost::is_same<typename Op::From, Row>,
+						boost::is_same<typename Op::Lookahead, Col>
+					>::type;
+				};
 			};
 
-			using type = typename mpl::if_<
-				detail::IsTerminal<mpl::identity<typename T::Lookahead>>,
-				TermLookaheadEquals<T>,
-				NontermLookaheadEquals<T>
-			>::type;
-		};
+			using res = typename mpl::find_if<Table, Predicate>::type;
 
-		template<typename Row, typename Col, typename Map>
-		struct FindIf {
-			using type = typename mpl::find_if<
-				Map,
-				mpl::and_<
-					FromEquals<mpl::_1, Row>,
-					LookaheadEquals<mpl::_1, Col>
-				>
-		    >::type;
-		};
-
-		template<typename Row, typename Col>
-		const static std::pair<detail::Operation, int> FillElement() {
-			using T1 = typename FindIf<Row, Col, R>::type;
-			using T2 = typename mpl::eval_if<
+			using res2 = typename mpl::eval_if<
 				boost::is_same<
-					T1,
-					typename mpl::end<R>::type
+					res,
+					typename mpl::end<Table>::type
 				>,
-				FindIf<Row, Col, G>,
-				mpl::identity<T1>
+				mpl::na,
+				mpl::deref<res>
 			>::type;
+			template<typename It>
+			static void doit(It& begin, It& end, int& state, std::vector<int>& stack,
+				typename std::iterator_traits<It>::value_type& symbol) {
+				//std::cout << stateIndex << "-> " << demangle(typeid(Row).name()) << std::endl;
+				//std::cout << symbolIndex << " -> " << demangle(typeid(Col).name()) << std::endl << std::endl;
+				tableOperationHelper(res2(), begin, end, state, stack, symbol);
+			}
+		};
 
-			using T3 = typename mpl::eval_if<
-				boost::is_same<
-					T2,
-					typename mpl::end<G>::type
-				>,
-				FindIf<Row, Col, S>,
-				mpl::identity<T2>
-			>::type;
-            using T = typename mpl::eval_if<
-                boost::is_same<
-    				T3,
-					typename mpl::end<S>::type
-				>,
-                mpl::na,
-                mpl::deref<T3>
-            >::type;
+#define PARSE_SWITCH_CASE_TERMINAL(_, symbolIndex, stateIndex) \
+	case symbolIndex-1: TableOperation<symbolIndex-1, stateIndex>::doit(begin, end, state, stack, symbol); break;
 
-			using U = ValueForOperation<T, ProductionMap, RowMap>;
-			return { U::tag, U::value };
-		}
+#define PARSE_SWITCH_CASE_STATE(_, stateIndex, __) \
+	case stateIndex:\
+	switch (symbol) {\
+		BOOST_PP_REPEAT(BOOST_PP_LIMIT_REPEAT, PARSE_SWITCH_CASE_TERMINAL, stateIndex) \
+	} \
+	break;
 
-		template<std::size_t row, std::size_t... Cols>
-		const static typename std::array<std::pair<detail::Operation, int>, NumCols::value> FillInner(detail::indices<Cols...>) {
-			return{ { FillElement<mpl::int_<row>, mpl::int_<Cols>>()... } };
-		}
-		
-		template<std::size_t... Rows>
-		const static typename TableInfo::table FillOuter(detail::indices<Rows...>) {
-			return{ { FillInner<Rows>(detail::build_indices<NumCols::value>())... } };
-		}
+		template<typename It>
+		static bool parse(It begin, It end) {
+			std::vector<int> stack;
+			auto state = 17;
+			stack.push_back(state);
+			auto symbol = *begin++;
+			while (state >= 0) {
+				/*std::cout << "State: " << state << std::endl << "Symbol: ";
+				switch(symbol) {
+					case -1: std::cout << "$"; break;
+					case 0: std::cout << "x"; break;
+					case 1: std::cout << "*"; break;
+					case 2: std::cout << "="; break;
+					case 4: std::cout << "S"; break;
+					case 5: std::cout << "E"; break;
+					case 6: std::cout << "V"; break;
+					default: std::cout << "ERROR!"; break;
+				}
+				std::cout << std::endl;
+				for(const auto& e : stack) { std::cout << e << " "; }
+				std::cout << std::endl;*/
 
-		const static typename TableInfo::table FillTable() {
-			return FillOuter(detail::build_indices<NumRows::value>());
-		}
-
-		template<std::size_t Index>
-		const static std::pair<int, int> FillProductionMapInner() {
-			using P = typename detail::nth<Index, P_, Ps_...>::type;
-
-			return {
-				mpl::at<
-					ColMap,
-					typename P::Left::type
-				>::type::value,
-				mpl::size<typename P::Right::type>::type::value
-			};
-		}
-
-		template<std::size_t... Is>
-		const static std::array<std::pair<int, int>, 1 + sizeof...(Ps_)> FillProductionMapOuter(detail::indices<Is...>) {
-			return { FillProductionMapInner<Is>()... };
-		}
-
-		const static std::array<std::pair<int, int>, 1 + sizeof...(Ps_)> FillProductionMap() {
-			return FillProductionMapOuter(detail::build_indices<1 + sizeof...(Ps_)>());
+				switch (state) {
+					BOOST_PP_REPEAT(BOOST_PP_LIMIT_REPEAT, PARSE_SWITCH_CASE_STATE, _)
+				}
+			}
+			if(state == -2) return true;
+			else return false;
 		}
 	};
-	
-	template<typename P, typename... Ps>
-	const typename LrParser<P, Ps...>::TableInfo::table LrParser<P, Ps...>::myTable =
-		LrParser<P, Ps...>::FillTable();
-	
-	template<typename P, typename... Ps>
-	const std::array<std::pair<int, int>, 1 + sizeof...(Ps)> LrParser<P, Ps...>::productions = FillProductionMap();
 }
 
 

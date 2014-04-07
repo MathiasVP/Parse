@@ -33,12 +33,12 @@ namespace parse {
 		using Left = Left_;
 		using Right = Right_;
 		//Verify the production returns the correct type
-		using result_type = typename function_types::result_type<typename BOOST_TYPEOF(&Action::operator())>::type;
+		using result_type = typename function_types::result_type<BOOST_TYPEOF(&Action::operator())>::type;
 		static_assert(std::is_same<typename Left::type, result_type>::value,
 			"Result type of action must match the left hand side of the production.");
 
 		//Verify formal param types match the right hand side
-		using arg_types = typename function_types::parameter_types<typename BOOST_TYPEOF(&Action::operator())>::type;
+		using arg_types = typename function_types::parameter_types<BOOST_TYPEOF(&Action::operator())>::type;
 		static_assert(
 			VerifyRightHandSide<
 				typename Right::type,

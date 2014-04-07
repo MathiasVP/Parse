@@ -10,8 +10,11 @@ namespace parse {
 	template<int N>
 	struct Terminal {
 		using type = std::string;
-		static const int value = N;
+		static const int value;
 	};
+
+	template<int N>
+	const int Terminal<N>::value = N;
 
 	template<typename T, typename U>
 	struct IsValidFormalParam : std::is_same<T, U> {
