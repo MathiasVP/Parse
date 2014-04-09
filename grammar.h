@@ -14,8 +14,11 @@
 #include <boost/mpl/deref.hpp>
 #include <boost/optional.hpp>
 #include <boost/mpl/long.hpp>
+#include <boost/mpl/plus.hpp>
 
 #include <boost/preprocessor.hpp>
+
+#include <boost/any.hpp>
 
 #include <fstream>
 #include <string>
@@ -24,6 +27,7 @@
 #include <map>
 #include "firstfollownullable.h"
 #include "indices.h"
+#include "CastCaller.h"
 
 namespace parse {
 	namespace detail {
@@ -555,7 +559,7 @@ namespace parse {
 
 		using FirstInit = typename ConsFirst<StartP, P_, Ps_...>::type;
 		using FollowInit = typename ConsFollow<StartP, P_, Ps_...>::type;
-
+		using Productions = typename mpl::list<P_, Ps_...>::type;
 		//Compute the first, follow and nullable sets
 		using ffn = detail::FirstFollowNullable<
 			FirstInit,
@@ -658,56 +662,60 @@ namespace parse {
 		using IntToRow = typename TableInfo::IntToRow;
 		using RowToInt = typename TableInfo::RowToInt;
 
-		template<typename From, typename To, typename Lookahead, typename It>
+		template<typename From, typename To, typename Lookahead, typename It, typename T>
 		static void tableOperationHelper(detail::ShiftT<From, To, Lookahead>,
-			It& begin, It& end, int& state, std::vector<int>& stack,
-			typename std::iterator_traits<It>::value_type& symbol) {
+			It& begin, It& end, int& state, std::vector<T>& stack,
+			T& symbol, std::vector<boost::any>& objStack) {
 
 			if(begin == end) {
 				state = -1;
 				return;			
 			}
-			stack.push_back(Lookahead::value);
+			objStack.push_back(symbol.first);
+			//stack.emplace_back("", Lookahead::value);
 			state = mpl::at<RowToInt, To>::type::value;
-			stack.push_back(state);
+			stack.emplace_back("", state);
 			symbol = *begin++;
 		}
 
-		template<typename From, typename To, typename Lookahead, typename It>
+		template<typename From, typename To, typename Lookahead, typename It, typename T>
 		static void tableOperationHelper(detail::GotoT<From, To, Lookahead>,
-			It& begin, It& end, int& state, std::vector<int>& stack,
-			typename std::iterator_traits<It>::value_type& symbol) {
+			It& begin, It& end, int& state, std::vector<T>& stack,
+			T& symbol, std::vector<boost::any>& objStack) {
 
 			symbol = stack.back();
 			stack.pop_back();
 			state = mpl::at<RowToInt, To>::type::value;
-			stack.push_back(state);
+			stack.emplace_back("", state);
 		}
 
-		template<typename From, typename Left, typename Right, typename Lookahead, typename It>
+		template<typename From, typename Left, typename Right, typename Lookahead, typename It, typename T>
 		static void tableOperationHelper(detail::ReduceT<From, Left, Right, Lookahead>,
-			It& begin, It& end, int& state, std::vector<int>& stack,
-			typename std::iterator_traits<It>::value_type& symbol) {
-			for(int i = 0; i < 2*mpl::size<Right>::type::value; ++i) {
+			It& begin, It& end, int& state, std::vector<T>& stack,
+			T& symbol, std::vector<boost::any>& objStack) {
+			for(int i = 0; i < mpl::size<Right>::type::value; ++i) {
 				stack.pop_back();
 			}
-			state = stack.back();
-			stack.push_back(mpl::at<ColToInt, typename Left::type>::type::value);
+			state = stack.back().second;
+			const int n = mpl::at<ProductionToInt, mpl::pair<Left, Right>>::type::value;
+			using Action = typename mpl::at_c<Productions, n>::type::Action;
+			//Build up action param list and call an instance of Action
+			detail::CastCall<Action, Right>()(objStack);
 			stack.push_back(symbol);
-			symbol = mpl::at<ColToInt, typename Left::type>::type::value;
+			symbol = {"", mpl::at<ColToInt, typename Left::type>::type::value};
 		}
 
-		template<typename From, typename It>
+		template<typename From, typename It, typename T>
 		static void tableOperationHelper(detail::AcceptT<From>,
-			It& begin, It& end, int& state, std::vector<int>& stack,
-			typename std::iterator_traits<It>::value_type& symbol) {
+			It& begin, It& end, int& state, std::vector<T>& stack,
+			T& symbol, std::vector<boost::any>& objStack) {
 			state = -2;
 		}
 
-		template<typename It>
+		template<typename It, typename T>
 		static void tableOperationHelper(mpl::na,
-			It& begin, It& end, int& state, std::vector<int>& stack,
-			typename std::iterator_traits<It>::value_type& symbol) {
+			It& begin, It& end, int& state, std::vector<T>& stack,
+			T& symbol, std::vector<boost::any>& objStack) {
 			state = -1;
 		}
 
@@ -731,7 +739,6 @@ namespace parse {
 			};
 
 			using res = typename mpl::find_if<Table, Predicate>::type;
-
 			using res2 = typename mpl::eval_if<
 				boost::is_same<
 					res,
@@ -740,45 +747,49 @@ namespace parse {
 				mpl::na,
 				mpl::deref<res>
 			>::type;
-			template<typename It>
-			static void doit(It& begin, It& end, int& state, std::vector<int>& stack,
-				typename std::iterator_traits<It>::value_type& symbol) {
-				tableOperationHelper(res2(), begin, end, state, stack, symbol);
+
+			template<typename It, typename T>
+			static void doit(It& begin, It& end, int& state, std::vector<T>& stack,
+				T& symbol, std::vector<boost::any>& objStack) {
+				tableOperationHelper(res2(), begin, end, state, stack, symbol, objStack);
 			}
 		};
 
 		template<int symbolIndex, int stateIndex>
 		struct TableOperation<symbolIndex, stateIndex, false, false> {
 			
-			template<typename It>
-			static void doit(It& begin, It& end, int& state, std::vector<int>& stack,
-				typename std::iterator_traits<It>::value_type& symbol) {}
+			template<typename It, typename T>
+			static void doit(It& begin, It& end, int& state, std::vector<T>& stack,
+				T& symbol, std::vector<boost::any>& objStack) {}
 		};
 
 #define PARSE_SWITCH_CASE_TERMINAL(_, symbolIndex, stateIndex) \
-	case symbolIndex-1: TableOperation<symbolIndex-1, stateIndex, symbolIndex-1 < NumCols::value, stateIndex < NumRows::value>::doit(begin, end, state, stack, symbol); break;
+	case symbolIndex-1: TableOperation<symbolIndex-1, stateIndex, symbolIndex-1 < NumCols::value, stateIndex < NumRows::value>::doit(begin, end, state, stack, symbol, objStack); break;
 
 #define PARSE_SWITCH_CASE_STATE(_, stateIndex, __) \
 	case stateIndex:\
-	switch (symbol) {\
-		BOOST_PP_REPEAT(BOOST_PP_LIMIT_REPEAT, PARSE_SWITCH_CASE_TERMINAL, stateIndex) \
+	switch (symbol.second) {\
+		BOOST_PP_REPEAT(PARSE_TABLE_COLS, PARSE_SWITCH_CASE_TERMINAL, stateIndex) \
 	} \
 	break;
 
 		template<typename It>
-		static bool parse(It begin, It end) {
-			std::vector<int> stack;
+		static boost::optional<ParseResultType> parse(It begin, It end) {
+			static_assert(PARSE_TABLE_COLS >= NumCols::value, "Error! PARSE_TABLE_COLS not large enough");
+			static_assert(PARSE_TABLE_ROWS >= NumRows::value, "Error! PARSE_TABLE_ROWS not large enough");
+			std::vector<typename std::iterator_traits<It>::value_type> stack;
+			std::vector<boost::any> objStack;
 			//I suspect that the last row is always the initial closure set. Not yet 100% sure though
 			auto state = NumRows::value-1;
-			stack.push_back(state);
+			stack.emplace_back("", state);
 			auto symbol = *begin++;
 			while (state >= 0) {
 				switch (state) {
-					BOOST_PP_REPEAT(BOOST_PP_LIMIT_REPEAT, PARSE_SWITCH_CASE_STATE, _)
+					BOOST_PP_REPEAT(PARSE_TABLE_ROWS, PARSE_SWITCH_CASE_STATE, _)
 				}
 			}
-			if(state == -2) return true;
-			else return false;
+			if(state == -2) return boost::any_cast<ParseResultType>(objStack.back());
+			else return boost::optional<ParseResultType>();
 		}
 	};
 }

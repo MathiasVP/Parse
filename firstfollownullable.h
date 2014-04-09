@@ -1,6 +1,7 @@
 #ifndef _PARSE_FIRST_FOLLOW_NULLABLE_H
 #define _PARSE_FIRST_FOLLOW_NULLABLE_H
 
+#include <boost/mpl/list.hpp>
 #include <boost/mpl/if.hpp>
 #include <boost/mpl/void.hpp>
 #include <boost/mpl/fold.hpp>
@@ -8,6 +9,7 @@
 #include <boost/mpl/placeholders.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/mpl/int.hpp>
+#include <boost/mpl/size.hpp>
 #include <boost/mpl/at.hpp>
 #include <boost/mpl/erase_key.hpp>
 #include <boost/mpl/erase.hpp>
