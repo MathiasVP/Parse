@@ -1,14 +1,14 @@
 Parse
 =====
 
-Compile time (LR) parser generator for C++
+Compile time (LR) type safe parser generator for C++
 
 ## Syntax
 
 A parser is defined using the LrParser class.
 An LrParser type takes a variadic number of template arguments, where each argument is a Production type.
 A Production type takes 3 arguments:
-- A Left-type, which takes a nonterminal (See "Nonterminals" for more information)
+- A nonterminal (See "Nonterminals" for more information)
 - A Right-type, which takes a variable number of nonterminals and terminals (See "Terminals" for more information)
 - A semantic action, which is something that is calleble (See "Semantic Actions" for more information)
 
@@ -20,32 +20,32 @@ A Production type takes 3 arguments:
 
 	using Parser = LrParser<
 		Production<
-			Left<Z>,
+			Z,
 			Right<d>,
 			Rule1
 		>,
 		Production<
-			Left<Z>,
+			Z,
 			Right<X, Y, Z>,
 			Rule2
 		>,
 		Production<
-			Left<Y>,
+			Y,
 			Right<>,
 			Rule3
 		>,
 		Production<
-			Left<Y>,
+			Y,
 			Right<c>,
 			Rule4
 		>,
 		Production<
-			Left<X>,
+			X,
 			Right<Y>,
 			Rule5
 		>,
 		Production<
-			Left<X>,
+			X,
 			Right<a>,
 			Rule6
 		>
@@ -54,23 +54,20 @@ A Production type takes 3 arguments:
 
 ## Nonterminals
 A Nonterminal class `A` must obey the following:
-- `A` be default constructable
 - `A` must publically derive from `Nonterminal<T>`
 
 ## Terminals
 A Terminal must obey the following:
-- Must have type `Terminal<n>`, where `n` is an integer that satisfies that two terminals `Terminal<n>` and `Terminal<m>` are equal if and only if `n == m`
+- Must have type `Terminal<n>`, where `n` is an integer that satisfies that two terminals `Terminal<n>` and `Terminal<m>` are equal if and only if `n == m`. These Terminal-types model token classes returned from some lexer.
 
 ## Semantic Actions
 A semantic action `R` valid if and only if:
 - Given a `Production` of the following form
 ```cpp
 Production<
-    Left<A>,
+    A,
     Right<B1, B2, ..., BN>,
     R
 >
 ```
 then an instance of type `R` is callable with arguments `B1(), B2(), ..., BN()` and the result of `R()(B1(), B2(), ..., BN())` is of type `A`.
-
-These requirements are verified at compile-time, with no overhead at runtime.
