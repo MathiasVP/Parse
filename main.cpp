@@ -88,27 +88,27 @@ int main(int argc, char* argv []) {
 
 	using Parser = LrParser<
 		Production<
-			Left<S>,
+			S,
 			Right<V, assign, E>,
 			Rule1
 		>,
 		Production<
-			Left<S>,
+			S,
 			Right<E>,
 			Rule2
 		>,
 		Production<
-			Left<E>,
+			E,
 			Right<V>,
 			Rule3
 		>,
 		Production<
-			Left<V>,
+			V,
 			Right<x>,
 			Rule4
 		>,
 		Production<
-			Left<V>,
+			V,
 			Right<deref, E>,
 			Rule5
 		>
