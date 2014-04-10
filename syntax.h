@@ -2,7 +2,6 @@
 #define _PARSE_SYNTAX_H
 
 #include <boost/mpl/list.hpp>
-#include <boost/typeof/std/utility.hpp>
 #include <string>
 
 namespace parse {
@@ -34,7 +33,7 @@ namespace parse {
 
 	template<typename Left_, typename Right_, typename Action_>
 	struct Production {
-		using Left = Left_;
+		using Left = Left<Left_>;
 		using Right = Right_;
 		using Action = Action_;
 	};

@@ -10,7 +10,6 @@
 #define PARSE_TABLE_ROWS 100
 #endif
 
-#include "util.h"
 #include "syntax.h"
 #include "firstfollownullable.h"
 #include "grammar.h"

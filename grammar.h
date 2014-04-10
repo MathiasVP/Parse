@@ -7,9 +7,7 @@
 #include <boost/mpl/map.hpp>
 #include <boost/mpl/fold.hpp>
 #include <boost/mpl/insert.hpp>
-#include <boost/mpl/same_as.hpp>
 #include <boost/mpl/equal_to.hpp>
-#include <boost/mpl/partition.hpp>
 #include <boost/mpl/find_if.hpp>
 #include <boost/mpl/deref.hpp>
 #include <boost/optional.hpp>
@@ -20,13 +18,8 @@
 
 #include <boost/any.hpp>
 
-#include <fstream>
 #include <string>
-#include <array>
-#include <stack>
-#include <map>
 #include "firstfollownullable.h"
-#include "indices.h"
 #include "CastCaller.h"
 
 namespace parse {

@@ -3,7 +3,6 @@
 
 #include <boost/mpl/list.hpp>
 #include <boost/mpl/if.hpp>
-#include <boost/mpl/void.hpp>
 #include <boost/mpl/fold.hpp>
 #include <boost/mpl/has_key.hpp>
 #include <boost/mpl/placeholders.hpp>
@@ -20,10 +19,8 @@
 #include <boost/mpl/insert.hpp>
 #include <boost/mpl/equal.hpp>
 #include <boost/mpl/set.hpp>
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/pop_front.hpp>
 #include <boost/mpl/empty.hpp>
-#include <type_traits>
+#include <boost/mpl/pair.hpp>
 
 namespace parse { namespace detail {
 
