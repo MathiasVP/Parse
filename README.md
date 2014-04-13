@@ -71,7 +71,7 @@ Production<
     R
 >
 ```
-then an instance of type `R` is callable with arguments `B1{}, B2{}, ..., BN{}` and the result of `R{}(B1{}, B2{}, ..., BN{})` is of type `A`.
+then an instance of type `R` is callable with arguments `b1, b2, ..., bN`, (where `decltype(bi) = Bi`) and the result of `R{}(b1, b2, ..., bN)` is of type `A`.
 
 ## Limitations
 - The number of rows or columns in the LR parsing table can be no more than `BOOST_PP_LIMIT_REPEAT`, which sadly is a very real limitation when parsing complex languages.
