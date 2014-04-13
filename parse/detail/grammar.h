@@ -13,6 +13,7 @@
 #include <boost/optional.hpp>
 #include <boost/mpl/long.hpp>
 #include <boost/mpl/plus.hpp>
+#include <boost/mpl/at.hpp>
 
 #include <boost/preprocessor.hpp>
 
@@ -421,7 +422,6 @@ namespace parse {
 			>::type;
 
 			using RowToInt = typename mpl::at_c<SGR2, 0>::type;
-			using IntToRow = typename mpl::at_c<SGR2, 1>::type;
 			using NumRows = typename mpl::at_c<SGR2, 2>::type;
 		};
 
@@ -448,27 +448,12 @@ namespace parse {
 
 			using result = typename detail::CreateIndexableTable<NumTerminals, NumNonTerminals, Table>;
 			using RowToInt = typename result::RowToInt;
-			using IntToRow = typename result::IntToRow;
 			using NumRows = typename result::NumRows;
-		};
-
-		template<typename P, typename... Ps>
-		struct LrParserHelper : LrParserHelper<Ps...> {
-		private:
-			//Ensure that the production is instantiated
-			//so that static_asserts are evaluated
-			P p;
-		};
-
-		template<typename P>
-		struct LrParserHelper<P> {
-		private:
-			P p;
 		};
 	}
 
 	template<typename P_, typename... Ps_>
-	struct LrParser : detail::LrParserHelper<P_, Ps_...> {
+	struct LrParser {
 	private:
 		template<typename P, typename... Ps>
 		struct ConsFollow {
@@ -652,8 +637,72 @@ namespace parse {
 		>::type;
 		using ColToInt = typename mpl::at_c<ColMap, 0>::type;
 		using IntToCol = typename mpl::at_c<ColMap, 1>::type;
-		using IntToRow = typename TableInfo::IntToRow;
 		using RowToInt = typename TableInfo::RowToInt;
+
+		template<typename Res, typename T>
+		struct RowColToOperationFunc {};
+
+		template<typename Res, typename From, typename To, typename Lookahead>
+		struct RowColToOperationFunc<Res, detail::ShiftT<From, To, Lookahead>> {
+			using type = typename mpl::insert<
+				Res,
+				mpl::pair<
+					mpl::pair<
+						typename mpl::at<RowToInt, From>::type,
+						mpl::long_<Lookahead::value>
+					>,
+					detail::ShiftT<From, To, Lookahead>
+				>
+			>::type;
+		};
+
+		template<typename Res, typename From, typename To, typename Lookahead>
+		struct RowColToOperationFunc<Res, detail::GotoT<From, To, Lookahead>> {
+			using type = typename mpl::insert<
+				Res,
+				mpl::pair<
+					mpl::pair<
+						typename mpl::at<RowToInt, From>::type,
+						typename mpl::at<ColToInt, Lookahead>::type
+					>,
+					detail::GotoT<From, To, Lookahead>
+				>
+			>::type;
+		};
+
+		template<typename Res, typename From, typename Left, typename Right, typename Lookahead>
+		struct RowColToOperationFunc<Res, detail::ReduceT<From, Left, Right, Lookahead>> {
+			using type = typename mpl::insert<
+				Res,
+				mpl::pair<
+					mpl::pair<
+						typename mpl::at<RowToInt, From>::type,
+						mpl::long_<Lookahead::value>
+					>,
+					detail::ReduceT<From, Left, Right, Lookahead>
+				>
+			>::type;
+		};
+
+		template<typename Res, typename From>
+		struct RowColToOperationFunc<Res, detail::AcceptT<From>> {
+			using type = typename mpl::insert<
+				Res,
+				mpl::pair<
+					mpl::pair<
+						typename mpl::at<RowToInt, From>::type,
+						mpl::long_<-1>
+					>,
+					detail::AcceptT<From>
+				>
+			>::type;
+		};
+
+		using RowColToOperation = typename mpl::fold<
+			Table,
+			mpl::map0<>,
+			RowColToOperationFunc<mpl::_1, mpl::_2>
+		>::type;
 
 		template<typename From, typename To, typename Lookahead, typename It, typename T>
 		static void tableOperationHelper(detail::ShiftT<From, To, Lookahead>,
@@ -665,7 +714,6 @@ namespace parse {
 				return;			
 			}
 			objStack.push_back(symbol.first);
-			//stack.emplace_back("", Lookahead::value);
 			state = mpl::at<RowToInt, To>::type::value;
 			stack.emplace_back("", state);
 			symbol = *begin++;
@@ -714,37 +762,19 @@ namespace parse {
 
 		template<int symbolIndex, int stateIndex, bool symbolOutOfBounds, bool stateOutOfBounds>
 		struct TableOperation {
-			using Row = typename mpl::at<IntToRow, mpl::int_<stateIndex>>::type;
-			using Col = typename mpl::eval_if<
-				mpl::has_key<IntToCol, mpl::long_<symbolIndex>>,
-				mpl::at<IntToCol, mpl::long_<symbolIndex>>,
-				mpl::identity<Terminal<symbolIndex>>
-			>::type;
+			using Row = mpl::int_<stateIndex>;
+			using Col = mpl::long_<symbolIndex>;
 
-			struct Predicate {
-				template<typename Op>
-				struct apply {
-					using type = typename mpl::and_<
-						boost::is_same<typename Op::From, Row>,
-						boost::is_same<typename Op::Lookahead, Col>
-					>::type;
-				};
-			};
-
-			using res = typename mpl::find_if<Table, Predicate>::type;
-			using res2 = typename mpl::eval_if<
-				boost::is_same<
-					res,
-					typename mpl::end<Table>::type
-				>,
-				mpl::na,
-				mpl::deref<res>
+			using res = typename mpl::eval_if<
+				mpl::has_key<RowColToOperation, mpl::pair<Row, Col>>,
+				mpl::at<RowColToOperation, mpl::pair<Row, Col>>,
+				mpl::na
 			>::type;
 
 			template<typename It, typename T>
 			static void doit(It& begin, It& end, int& state, std::vector<T>& stack,
 				T& symbol, std::vector<boost::any>& objStack) {
-				tableOperationHelper(res2(), begin, end, state, stack, symbol, objStack);
+				tableOperationHelper(res(), begin, end, state, stack, symbol, objStack);
 			}
 		};
 
@@ -772,7 +802,6 @@ namespace parse {
 			static_assert(PARSE_TABLE_ROWS >= NumRows::value, "Error! PARSE_TABLE_ROWS not large enough");
 			std::vector<typename std::iterator_traits<It>::value_type> stack;
 			std::vector<boost::any> objStack;
-			//I suspect that the last row is always the initial closure set. Not yet 100% sure though
 			auto state = NumRows::value-1;
 			stack.emplace_back("", state);
 			auto symbol = *begin++;

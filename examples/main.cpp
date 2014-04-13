@@ -52,49 +52,49 @@ public:
 */
 struct Plus {
 	E operator()(E e, std::string, T t) {
-		return E(e.value() + t.value());
+		return e.value() + t.value();
 	}
 };
 
 struct Minus {
 	E operator()(E e, std::string, T t) {
-		return E(e.value() - t.value());
+		return e.value() - t.value();
 	}
 };
 
 struct Term {
 	E operator()(T t) {
-		return E(t.value());
+		return t.value();
 	}
 };
 
 struct Times {
 	T operator()(T t, std::string, F f) {
-		return T(t.value() * f.value());
+		return t.value() * f.value();
 	}
 };
 
 struct Divide {
 	T operator()(T t, std::string, F f) {
-		return T(t.value() / f.value());
+		return t.value() / f.value();
 	}
 };
 
 struct Factor {
 	T operator()(F f) {
-		return T(f.value());
+		return f.value();
 	}
 };
 
 struct Number {
 	F operator()(std::string n) {
-		return F(std::stoi(n));
+		return std::stoi(n);
 	}
 };
 
 struct Parenthesis {
 	F operator()(std::string, E e, std::string) {
-		return F(e.value());
+		return e.value();
 	}
 };
 
@@ -161,7 +161,7 @@ int main(int argc, char* argv []) {
 		>
 	>;
 
-	//A sample input
+	//A sample input. Note: This is the first code we've written which actually happens at runtime.
 	std::vector<std::pair<std::string, int>> tokens = {
 		{"2", num::value}, {"*", mult::value}, {"3", num::value}, {"+", plus::value}, {"1", num::value}, {"", -1}
 	};
