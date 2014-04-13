@@ -75,4 +75,5 @@ then an instance of type `R` is callable with arguments `B1{}, B2{}, ..., BN{}` 
 
 ## Limitations
 - The number of rows or columns in the LR parsing table can be no more than `BOOST_PP_LIMIT_REPEAT`, which sadly is a very real limitation when parsing complex languages.
-- Due to the amount of template meta-programming used within the library, the compile time (even for toy examples) is almost unbearable.
+- Due to the amount of template meta-programming used within the library, the compile time can be quite long
+![xkcd comic 303](http://imgs.xkcd.com/comics/compiling.png)
